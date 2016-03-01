@@ -25,7 +25,7 @@ TEST_3M_FILE = os.path.join(DATA_DIR, "test_3m.txt")
 def train_split(train_dataset, seed=None):
     print("Train split")
     train_5m, validation_2m, test_3m = (
-        full_train.randomSplit([5, 2, 3], seed=seed))
+        train_dataset.randomSplit([0.5, 0.2, 0.3], seed=seed))
 
     print("Saving train 5M file to %s" % TRAIN_5M_FILE)
     train_5m.saveAsTextFile(TRAIN_5M_FILE)
@@ -37,8 +37,7 @@ def train_split(train_dataset, seed=None):
 
 def test_split(raw_dataset, seed=None):
     print("Test split")
-    train, test = raw_dataset.randomSplit([10, 38], seed=seed)
-    # train.saveAsTextFile(os.path.join(DATA_DIR, "full_train.txt"))
+    train, test = raw_dataset.randomSplit([0.2083333, 0.7916667], seed=seed)
     print("Saving test file to %s" % FULL_TEST_FILE)
     test.saveAsTextFile(FULL_TEST_FILE)
     return train, test
