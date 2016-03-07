@@ -1,48 +1,59 @@
+#!/usr/bin/env python2
+
 import sys
 import os.path
 import time
 import random
-import findspark
-import pyspark
-from pyspark.sql import SQLContext
+import config
 
-findspark.init()
-sc = pyspark.SparkContext()
-sqlContext = SQLContext(sc)
+COMPRESSION = "org.apache.hadoop.io.compress.GzipCodec"
+sc = config.SPARK_CONTEXT
 
-DATA_DIR = "dac/split/"
-
-HELP_PROMPT = """split.py
-Usage:
-    split.py FILENAME
-"""
-
-FULL_TEST_FILE = os.path.join(DATA_DIR, "test.txt")
-TRAIN_5M_FILE = os.path.join(DATA_DIR, "train_5m.txt")
-VALIDATION_2M_FILE = os.path.join(DATA_DIR, "validation_2m.txt")
-TEST_3M_FILE = os.path.join(DATA_DIR, "test_3m.txt")
 
 def train_split(train_dataset, seed=None):
-    print("Train split")
+    print("Splitting train into train, validation, test files")
     train_5m, validation_2m, test_3m = (
         train_dataset.randomSplit([0.5, 0.2, 0.3], seed=seed))
 
-    print("Saving train 5M file to %s" % TRAIN_5M_FILE)
-    train_5m.saveAsTextFile(TRAIN_5M_FILE)
-    print("Saving validation 2M file to %s" % VALIDATION_2M_FILE)
-    validation_2m.saveAsTextFile(VALIDATION_2M_FILE)
-    print("Saving test 3M file to %s" % TEST_3M_FILE)
-    test_3m.saveAsTextFile(TEST_3M_FILE)
+    print("Saving train file to %s" % config.SPLIT_TRAIN_PATH)
+    train_5m.saveAsTextFile(config.SPLIT_TRAIN_PATH,
+                            compressionCodecClass=COMPRESSION)
+
+    print("Saving validation file to %s" % config.SPLIT_VALIDATION_PATH)
+    validation_2m.saveAsTextFile(config.SPLIT_VALIDATION_PATH,
+                                 compressionCodecClass=COMPRESSION)
+
+    print("Saving test file to %s" % config.SPLIT_TRAIN_TEST_PATH)
+    test_3m.saveAsTextFile(config.SPLIT_TRAIN_TEST_PATH,
+                           compressionCodecClass=COMPRESSION)
+
+    return train_5m, validation_2m, test_3m
 
 
 def test_split(raw_dataset, seed=None):
-    print("Test split")
+    print("Splitting source into train and test files")
     train, test = raw_dataset.randomSplit([0.2083333, 0.7916667], seed=seed)
-    print("Saving test file to %s" % FULL_TEST_FILE)
-    test.saveAsTextFile(FULL_TEST_FILE)
+
+    print("Saving test file to %s" % config.SPLIT_TEST_PATH)
+    test.saveAsTextFile(config.SPLIT_TEST_PATH,
+                        compressionCodecClass=COMPRESSION)
+
     return train, test
 
+
+HELP_PROMPT = ("""split.py
+
+Usage:
+    split.py [FILE]
+
+Options:
+FILE    The source file to split (default=%s)
+""" % config.FULL_TRAIN_PATH)
+
+
 def main(filename):
+    print("Splitting %s" % filename)
+
     raw_dataset = sc.textFile(filename)
     random.seed(time.time())
     seed = int(random.random())
@@ -52,9 +63,13 @@ def main(filename):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        print("Splitting %s" % sys.argv[1])
+    if len(sys.argv) == 1:
+        main(config.FULL_TRAIN_PATH)
+    elif sys.argv[1] == "-h" or sys.argv[1] == "--help":
+        print(HELP_PROMPT)
+        sys.exit(0)
+    elif len(sys.argv) == 2:
         main(sys.argv[1])
     else:
         print(HELP_PROMPT)
-        sys.exit(0)
+        sys.exit(1)
