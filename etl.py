@@ -1,100 +1,92 @@
-import config
-
-# Label - Target variable that indicates if an ad was clicked (1) or not (0).
-# I1-I13 - A total of 13 columns of integer features (mostly count features).
-# C1-C26 - A total of 26 columns of categorical features. The values of these
-# features have been hashed onto 32 bits for anonymization purposes.
-FIRST_CAT_INDEX = 14  # Label + I13 = index 14 for first categorical feature
+from pyspark.sql.functions import udf
+from pyspark.sql.types import DoubleType
+from pyspark.ml.feature import VectorAssembler, StandardScaler
 
 
-class CriteoData(object):
-    COLUMN_NAMES = (
-        ["label"] +
-        ["%s%d" % ("I", i) for i in xrange(1, 14)] +
-        ["%s%d" % ("C", i - 13) for i in xrange(14, 40)]
+def make_value_rate_udf(denominator):
+    return udf(lambda count: count / denominator if count else 0.0, DoubleType())
+
+
+# dictionary of {value: rate}
+def make_resolve_rate_udf(rates):
+    return udf(lambda hash_value: rates.get(hash_value, 0.0), DoubleType())
+
+
+def cat_rate_dict(df):
+    return {row.value: float(row.rate) for row in df.collect()}
+
+
+def cat_rate_col_name(col_name):
+    return "%s_rate" % col_name
+
+
+def df_with_rate(df, col_name, val_rates):
+    val_rate_udf = make_resolve_rate_udf(val_rates)
+    rate_col_name = cat_rate_col_name(col_name)
+    return df.withColumn(rate_col_name, val_rate_udf(df[col_name]))
+
+
+# calculate categorical proportion columns
+# category_count is a DataFrame with columns ([COLUMN_NAME], count)
+def cat_rate_df(cat_count, rate_udf):
+    col_name = cat_count.columns[0]
+    return cat_count.select([
+        cat_count[col_name].alias("value"),
+        rate_udf(cat_count["count"].cast(DoubleType())).alias("rate")
+    ])
+
+
+def cat_features(data, column_names, cat_counts, total_row_count):
+    df = data.df
+    rate_udf = make_value_rate_udf(total_row_count)
+    cat_rates = {}
+    for col_name in column_names:
+        cat_count = cat_counts[col_name]
+        rate_df = cat_rate_df(cat_count, rate_udf)
+        # Convert list of [Row(value, rate), ...] results to dict keyed on value
+        cat_rates[col_name] = cat_rate_dict(rate_df)
+        # Add category rates for the corresponding category values
+        df = df_with_rate(df, col_name, cat_rates[col_name])
+    return df, cat_rates
+
+
+def standard_scale_column(df, col_name):
+    output_col_name = "%s%s" % (col_name, "_scaled")
+    scaler = StandardScaler(inputCol=col_name, outputCol=output_col_name)
+    return scaler.fit(df)
+
+
+def scale_train(df, column_names):
+    # Vectorize
+    assembler = VectorAssembler(inputCols=column_names, outputCol="features")
+    df = assembler.transform(df)
+
+    # Scale
+    scaler = StandardScaler(inputCol="features", outputCol="features_scaled")
+    scaler_model = scaler.fit(df)
+
+    return scaler_model.transform(df), scaler_model
+
+
+def feature_col_names(data, cat_column_names):
+    return (
+        data.integer_column_names +
+        [cat_rate_col_name(col_name) for col_name in cat_column_names]
     )
 
-    def __init__(self, spark_cotext, sql_context, file=None, df=None, rdd=None):
-        self._sc = spark_cotext
-        self._sqlc = sql_context
-        self._file_path = file
-        self._rdd = rdd
-        self._df = df
-        if self._file_path is None and self._df is None and self._rdd is None:
-            raise ValueError("One of file, df, or rdd must be provided")
-        self._integer_column_names = None
-        self._categorical_column_names = None
 
-    @staticmethod
-    def _convert_value(index, value):
-        if index < FIRST_CAT_INDEX:
-            return int(value) if value else None
-        else:
-            return value if value else None
+# data = CriteoData
+# cat_features = cat columns to include
+def transform_train(data, int_means, cat_column_names, cat_counts, total_row_count):
+    df, cat_rates_map = cat_features(data, cat_column_names,
+                                               cat_counts, total_row_count)
 
-    @classmethod
-    def _convert_line(cls, line):
-        return [cls._convert_value(i, value)
-                for i, value in enumerate(line.split("\t"))]
+    col_names = feature_col_names(data, cat_column_names)
 
-    @property
-    def rdd(self):
-        if self._rdd is None and self._file_path:
-            self._rdd = (
-                self._sc.textFile(self._file_path)
-                .map(self._convert_line))
-        elif self._rdd and self._df is not None:
-            self._rdd = self._df.rdd
-        elif self._rdd is None:
-            raise ValueError("One of rdd or file must be provided")
-        return self._rdd
+    df, scaler = scale_train(df.fillna(int_means), col_names)
 
-    @property
-    def df(self):
-        if self._df is None:
-            self._df = self._sqlc.createDataFrame(self.rdd,
-                                                  CriteoData.COLUMN_NAMES)
-        return self._df
-
-    @property
-    def integer_column_names(self):
-        if self._integer_column_names is None:
-            self._integer_column_names = [col_name for col_name
-                                          in self.df.columns
-                                          if col_name[0] == "I"]
-        return self._integer_column_names
-
-    @property
-    def categorical_column_names(self):
-        if self._categorical_column_names is None:
-            self._categorical_column_names = [col_name for col_name
-                                              in self.df.columns
-                                              if col_name[0] == "C"]
-        return self._categorical_column_names
-
-    @property
-    def integer_columns(self):
-        return self.df.select(self.integer_column_names())
-
-    @property
-    def categorical_columns(self):
-        return self.df.select(self.categorical_column_names())
-
-
-class CriteoDataSets(object):
-    def __init__(self, spark_cotext, sql_context):
-        self.sc = spark_cotext
-        self.sqlc = sql_context
-
-        # Full, original training set
-        self.train = CriteoData(self.sc, self.sqlc, config.FULL_TRAIN_PATH)
-
-        # Training set splits
-        self.test = CriteoData(self.sc, self.sqlc,
-                               config.SPLIT_TEST_PATH)
-        self.test_3m = CriteoData(self.sc, self.sqlc,
-                                  config.SPLIT_TRAIN_TEST_PATH)
-        self.train_5m = CriteoData(self.sc, self.sqlc, config.SPLIT_TRAIN_PATH)
-        self.validation_2m = CriteoData(self.sc, self.sqlc,
-                                        config.SPLIT_VALIDATION_PATH)
-        self.debug = CriteoData(self.sc, self.sqlc, config.DEBUG_PATH)
+    return (
+        df.select(["label", "features", "features_scaled"]),
+        scaler,
+        cat_rates_map
+    )

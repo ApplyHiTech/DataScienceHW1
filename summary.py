@@ -1,9 +1,9 @@
 #!/usr/bin/env python2
 
-from etl import CriteoDataSets
-
-import pyspark.sql.functions as sqlFunctions
 import config
+
+from dataset import CriteoDataSets
+from pyspark.sql.functions import kurtosis, skewness, avg, stddev
 
 
 def label_histogram(data):
@@ -50,8 +50,10 @@ def cat_column_key_counts(data, col_name):
     # return data.df.groupBy(col_name).count().orderBy("count", ascending=False)
 
 
-def cat_column_counts_iter(data):
-    for col_name in data.categorical_column_names:
+
+def cat_column_counts_iter(data, col_names=None):
+    col_names = col_names if col_names is not None else data.categorical_column_names
+    for col_name in col_names:
         yield col_name, cat_column_key_counts(data, col_name)
 
 
@@ -63,10 +65,10 @@ def make_col_func(col_func):
     return wrapped
 
 
-calc_kurtosis = make_col_func(sqlFunctions.kurtosis)
-calc_skewness = make_col_func(sqlFunctions.skewness)
-calc_mean = make_col_func(sqlFunctions.avg)
-calc_stddev = make_col_func(sqlFunctions.stddev)
+calc_kurtosis = make_col_func(kurtosis)
+calc_skewness = make_col_func(skewness)
+calc_mean = make_col_func(avg)
+calc_stddev = make_col_func(stddev)
 calc_keys = ["kurtosis", "skewness", "mean", "stddev"]
 
 
@@ -76,6 +78,12 @@ def integer_column_stats_iter(data):
         calcs = (calc_kurtosis(data, col), calc_skewness(data, col),
                  calc_mean(data, col), calc_stddev(data, col))
         yield col_name, dict(zip(calc_keys, calcs))
+
+
+def integer_column_mean_iter(data):
+    for col_name in data.integer_column_names:
+        col = data.df[col_name]
+        yield col_name, calc_mean(data, col)
 
 
 def column_distinct_count(data, column_name):
