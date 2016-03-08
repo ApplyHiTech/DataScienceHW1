@@ -2,7 +2,14 @@ import os
 import findspark
 import pyspark
 
-DEBUG = True
+try:
+    ENV = os.environ["PY_ENV"]
+except KeyError:
+    ENV = "debug"
+
+DEBUG = (ENV == "debug")
+TEST = (ENV == "test")
+PROD = (ENV == "production")
 
 findspark.init()
 SPARK_CONTEXT = pyspark.SparkContext()

@@ -1,10 +1,15 @@
+import summary
+
 from pyspark.sql.functions import udf
 from pyspark.sql.types import DoubleType
 from pyspark.ml.feature import VectorAssembler, StandardScaler
 
+RAW_FEATURES_COL = "raw_features"
+FEATURES_COL = "features"
+
 
 def make_value_rate_udf(denominator):
-    return udf(lambda count: count / denominator if count else 0.0, DoubleType())
+    return udf(lambda num: num / denominator if num else 0.0, DoubleType())
 
 
 # dictionary of {value: rate}
@@ -50,22 +55,26 @@ def cat_features(data, column_names, cat_counts, total_row_count):
     return df, cat_rates
 
 
-def standard_scale_column(df, col_name):
-    output_col_name = "%s%s" % (col_name, "_scaled")
-    scaler = StandardScaler(inputCol=col_name, outputCol=output_col_name)
-    return scaler.fit(df)
+def assemble_vector(df, col_names):
+    assembler = VectorAssembler(inputCols=col_names, outputCol=RAW_FEATURES_COL)
+    return assembler.transform(df)
 
 
-def scale_train(df, column_names):
-    # Vectorize
-    assembler = VectorAssembler(inputCols=column_names, outputCol="features")
-    df = assembler.transform(df)
+def scale_train(df, col_names):
+    df = assemble_vector(df, col_names)
+    # df.select(RAW_FEATURES_COL).show()
 
-    # Scale
-    scaler = StandardScaler(inputCol="features", outputCol="features_scaled")
+    scaler = StandardScaler(inputCol=RAW_FEATURES_COL, outputCol=FEATURES_COL)
     scaler_model = scaler.fit(df)
 
-    return scaler_model.transform(df), scaler_model
+    df = scaler_model.transform(df)
+    # df.select([RAW_FEATURES_COL, FEATURES_COL]).show()
+
+    return df, scaler_model
+
+
+def fill_null_ints(df, int_means):
+    return df.fillna(int_means)
 
 
 def feature_col_names(data, cat_column_names):
@@ -75,18 +84,40 @@ def feature_col_names(data, cat_column_names):
     )
 
 
-# data = CriteoData
-# cat_features = cat columns to include
-def transform_train(data, int_means, cat_column_names, cat_counts, total_row_count):
-    df, cat_rates_map = cat_features(data, cat_column_names,
-                                               cat_counts, total_row_count)
+def convert_label(df):
+    return df.select([df["label"].cast(DoubleType()), df["features"]])
 
-    col_names = feature_col_names(data, cat_column_names)
 
-    df, scaler = scale_train(df.fillna(int_means), col_names)
+def transform_train(data, int_means, cat_column_names, cat_counts):
+    row_count = summary.row_count(data)
+
+    df, cat_rates = cat_features(data, cat_column_names, cat_counts, row_count)
+
+    df, scaler = scale_train(fill_null_ints(df, int_means),
+                             feature_col_names(data, cat_column_names))
 
     return (
-        df.select(["label", "features", "features_scaled"]),
-        scaler,
-        cat_rates_map
+        convert_label(df),
+        int_means,
+        cat_rates,
+        scaler
     )
+
+
+def scale_test(df, col_names, scaler):
+    return scaler.transform(assemble_vector(df, col_names))
+
+
+def transform_test(data, int_means, cat_rates, scaler):
+    cat_column_names = cat_rates.keys()
+    column_names = feature_col_names(data, cat_column_names)
+
+    # Replace categorical values with rate values
+    df = data.df
+    for col_name in cat_column_names:
+        df = df_with_rate(df, col_name, cat_rates[col_name])
+
+    # Replace null integer values with mean values
+    df = fill_null_ints(df, int_means)
+
+    return convert_label(scale_test(df, column_names, scaler))
