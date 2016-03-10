@@ -10,6 +10,11 @@ COMPRESSION = "org.apache.hadoop.io.compress.GzipCodec"
 sc = config.SPARK_CONTEXT
 
 
+if not os.path.exists(SPLIT_FILES_PATH):
+    print("Creating split files directory %s" % SPLIT_FILES_PATH)
+    os.mkdir(SPLIT_FILES_PATH)
+
+
 def train_split(train_dataset, seed=None):
     print("Splitting train into train, validation, test files")
     train_5m, validation_2m, test_3m = (

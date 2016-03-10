@@ -1,8 +1,5 @@
 #!/usr/bin/env python2
 
-import config
-
-from dataset import CriteoDataSets
 from pyspark.sql.functions import kurtosis, skewness, avg, stddev
 
 
@@ -45,14 +42,17 @@ def int_columns_histograms_iter(data):
 
 
 def cat_column_key_counts(data, col_name):
+    import config
+
     df = data.df.groupBy(col_name).count()
     return df if not config.DEBUG else df.orderBy("count", ascending=False)
     # return data.df.groupBy(col_name).count().orderBy("count", ascending=False)
 
 
-
 def cat_column_counts_iter(data, col_names=None):
-    col_names = col_names if col_names is not None else data.categorical_column_names
+    col_names = (
+        col_names if col_names is not None else
+        data.categorical_column_names)
     for col_name in col_names:
         yield col_name, cat_column_key_counts(data, col_name)
 
