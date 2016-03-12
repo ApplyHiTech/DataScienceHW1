@@ -7,7 +7,7 @@ from pyspark.sql import SQLContext
 try:
     ENV = os.environ["PY_ENV"]
 except KeyError:
-    ENV = "debug"
+    ENV = "test"
 
 DEBUG = (ENV == "debug")
 TEST = (ENV == "test")

@@ -1,4 +1,25 @@
-# DataScienceHW1
+# Data Science - Assignment 1
+### Sean Herman, Daniel Reidler
 
-The following Repo is prepared for Data Science HW1 with Sean Herman - @Seanjh
+## Setup
+This project was developed in Python (2.7) and Spark 1.6.0 built with Hadoop 2.6. First, install the project's Python dependencies with pip:
 
+    $ pip install -r requirements.txt
+
+### Criteo Data
+This project analyzes data from the [Kaggle's Display Advertising Challenge](https://www.kaggle.com/c/criteo-display-ad-challenge). `config.py` must be updated to point to a directory, `DAC_FILES_PATH`, which includes the `train.txt` file included in the Criteo archive. `SPLIT_FILES_PATH`, `RESULTS_PATH`, `MODELS_PATH` should also be updated to storage locations for the train file splits, the results charts, and saved training models.
+
+Run the `split.py` script to split Criteo's `train.txt` dataset into a `test.txt` set (approx. 38mm rows) and training set (approx. 10mm rows). This training set is further divided into `train_5m.txt`, `test_3m.txt`, and `validation_2m.txt`.
+
+    $ ./split.py
+
+## Instructions
+Once setup and Criteo Data splits are completed, the data analysis can be initiated through `classify.py`.
+
+To train on `train_5m.txt` and make predictions for `test_3m.txt` and `validation_2m.txt`:
+
+    $ ./classify.py
+
+To train on `train_5m.txt` and make predictions for `test.txt`:
+
+    $ PY_ENV=production ./classify.py
