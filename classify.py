@@ -71,7 +71,7 @@ def train_models(df):
 
 
 def train_predict(test, model, model_name="Model"):
-    predictions = model.transform(transformed)
+    predictions = model.transform(test)
     predictions.select(["features", "label", "prediction"]).show()
     evaluate_predictions(predictions, model_name)
 
@@ -111,8 +111,8 @@ def main():
 
     if config.DEBUG:
         df = transform_test(data.debug, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-validation")
-        train_predict(df, rf_model, "RandomForestClassifier-validation")
+        train_predict(df, lr_model, "LogisticRegression-debug")
+        train_predict(df, rf_model, "RandomForestClassifier-debug")
 
     elif config.VALIDATE:
         df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
@@ -125,8 +125,8 @@ def main():
         train_predict(df, rf_model, "RandomForestClassifier-test")
 
         df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression")
-        train_predict(df, rf_model, "RandomForestClassifier")
+        train_predict(df, lr_model, "LogisticRegression-validation")
+        train_predict(df, rf_model, "RandomForestClassifier-validation")
 
     elif config.PROD:
         prod_predict(data.test)

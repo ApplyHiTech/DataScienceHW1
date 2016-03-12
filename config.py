@@ -22,7 +22,6 @@ SPARK_SQL_CONTEXT = SQLContext(SPARK_CONTEXT)
 DAC_FILES_PATH = "dac"
 FULL_TRAIN_PATH = os.path.join(DAC_FILES_PATH, "train.txt")
 DEBUG_PATH = os.path.join(DAC_FILES_PATH, "small-train.txt")
-# DEBUG_PATH = os.path.join(DAC_FILES_PATH, "very-small-train.txt")
 
 SPLIT_FILES_PATH = os.path.join(DAC_FILES_PATH, "split")
 RESULTS_PATH = os.path.join("results")
