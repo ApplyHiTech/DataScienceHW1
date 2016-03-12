@@ -63,13 +63,6 @@ def train_validate(train, validation):
     raise NotImplementedError()
 
 
-def train_models(df):
-    lr, lr_model = train_logistic(df)
-    rf, rf_model = train_random_forest(df)
-
-    return lr_model, rf_model
-
-
 def train_predict(test, model, model_name="Model"):
     predictions = model.transform(test)
     predictions.select(["features", "label", "prediction"]).show()
@@ -107,7 +100,12 @@ def main():
         train = data.train_5m
 
     df, int_means, cat_rates, scaler = prepare(train, CAT_COLUMNS)
-    lr_model, rf_model = train_models(df)
+
+    # Only the RandomForestClassifier is used for production scoring
+    if not config.PROD:
+        _, lr_model = train_logistic(df)
+
+    _, rf_model = train_random_forest(df)
 
     if config.DEBUG:
         df = transform_test(data.debug, int_means, cat_rates, scaler)
@@ -116,20 +114,21 @@ def main():
 
     elif config.VALIDATE:
         df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-validation")
-        train_predict(df, rf_model, "RandomForestClassifier-validation")
+        train_predict(df, lr_model, "LogisticRegression-validation_2m")
+        train_predict(df, rf_model, "RandomForestClassifier-validation_2m")
 
     elif config.TEST:
         df = transform_test(data.test_3m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-test")
-        train_predict(df, rf_model, "RandomForestClassifier-test")
+        train_predict(df, lr_model, "LogisticRegression-test_3m")
+        train_predict(df, rf_model, "RandomForestClassifier-test_3m")
 
         df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-validation")
-        train_predict(df, rf_model, "RandomForestClassifier-validation")
+        train_predict(df, lr_model, "LogisticRegression-validation_2m")
+        train_predict(df, rf_model, "RandomForestClassifier-validation_2m")
 
     elif config.PROD:
-        prod_predict(data.test)
+        df = transform_test(data.test, int_means, cat_rates, scaler)
+        train_predict(df, rf_model, "RandomForestClassifier-test")
 
     sc.stop()
 
