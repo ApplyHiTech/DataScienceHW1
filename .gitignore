@@ -78,3 +78,5 @@ dac
 *.tar.gz
 metastore_db/
 derby.log
+results/
+models/

@@ -9,10 +9,7 @@ import config
 COMPRESSION = "org.apache.hadoop.io.compress.GzipCodec"
 sc = config.SPARK_CONTEXT
 
-
-if not os.path.exists(SPLIT_FILES_PATH):
-    print("Creating split files directory %s" % SPLIT_FILES_PATH)
-    os.mkdir(SPLIT_FILES_PATH)
+config.maybe_make_path(config.SPLIT_FILES_PATH)
 
 
 def train_split(train_dataset, seed=None):

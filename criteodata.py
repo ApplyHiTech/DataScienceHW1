@@ -90,8 +90,7 @@ class CriteoDataSets(object):
         self.train = CriteoData(self.sc, self.sqlc, config.FULL_TRAIN_PATH)
 
         # Training set splits
-        self.test = CriteoData(self.sc, self.sqlc,
-                               config.SPLIT_TEST_PATH)
+        self.test = CriteoData(self.sc, self.sqlc, config.SPLIT_TEST_PATH)
         self.test_3m = CriteoData(self.sc, self.sqlc,
                                   config.SPLIT_TRAIN_TEST_PATH)
         self.train_5m = CriteoData(self.sc, self.sqlc, config.SPLIT_TRAIN_PATH)
