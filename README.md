@@ -13,7 +13,9 @@ Run the `split.py` script to split Criteo's `train.txt` dataset into a `test.txt
 
     $ ./split.py
 
-## Instructions
+## Summary Statistics Instructions
+
+## Classification Instructions
 Once setup and Criteo Data splits are completed, the data analysis can be initiated through `classify.py`.
 
 To train on `train_5m.txt` and make predictions for `test_3m.txt` and `validation_2m.txt`:
