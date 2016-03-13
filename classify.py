@@ -9,6 +9,7 @@ from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import StringIndexer
+from pyspark.mllib.linalg import Vectors
 from criteodata import CriteoDataSets
 from etl import transform_train, transform_test
 from summary import cat_column_counts_iter, integer_column_mean_iter
@@ -47,7 +48,7 @@ def train_random_forest(df):
     return rf, rf.fit(td)
 
 
-def evaluate_predictions(predictions, model_name=""):
+def evaluate_charts(predictions, model_name=""):
     labels = evaluate.labels_array(predictions)
     scores = evaluate.scores_array(predictions)
     fpr, tpr, thresholds = evaluate.roc(labels, scores)
@@ -66,11 +67,20 @@ def train_validate(train, validation):
 def train_predict(test, model, model_name="Model"):
     predictions = model.transform(test)
     predictions.select(["features", "label", "prediction"]).show()
-    evaluate_predictions(predictions, model_name)
+    return predictions
 
 
-def prod_predict(test):
-    raise NotImplementedError()
+def evaluate_roc_auc(predictions, sqlc):
+    raw = scores_and_labels(predictions, sqlc)
+    evaluator = BinaryClassificationEvaluator()
+    return evaluator.evaluate(raw)
+
+
+def scores_and_labels(predictions, sqlc):
+    raw = predictions.map(lambda r: (Vectors.dense(1.0 - r["prediction"],
+                                                   r["prediction"]),
+                                     r["label"]))
+    return sqlc.createDataFrame(raw, ["rawPrediction", "label"])
 
 
 # Given Global Variables that represent the feature columns we wish to include
@@ -109,26 +119,48 @@ def main():
 
     if config.DEBUG:
         df = transform_test(data.debug, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-debug")
-        train_predict(df, rf_model, "RandomForestClassifier-debug")
+        predictions = train_predict(df, lr_model, "LogisticRegression-debug")
+        predictions.show(100)
+        auc = evaluate_roc_auc(predictions, sqlc)
+        print("\n\nArea Under ROC Curve: %0.3f\n\n" % auc)
+        predictions = train_predict(df, rf_model,
+                                    "RandomForestClassifier-debug")
+        predictions.show(100)
+        auc = evaluate_roc_auc(predictions, sqlc)
+        print("\n\nArea Under ROC Curve: %0.3f\n\n" % auc)
 
     elif config.VALIDATE:
         df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-validation_2m")
-        train_predict(df, rf_model, "RandomForestClassifier-validation_2m")
+        predictions = train_predict(df, lr_model,
+                                    "LogisticRegression-validation_2m")
+        evaluate_charts(predictions, "LogisticRegression-validation_2m")
+        predictions = train_predict(df, rf_model,
+                                    "RandomForestClassifier-validation_2m")
+        evaluate_charts(predictions, "RandomForestClassifier-validation_2m")
 
     elif config.TEST:
         df = transform_test(data.test_3m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-test_3m")
-        train_predict(df, rf_model, "RandomForestClassifier-test_3m")
+        predictions = train_predict(df, lr_model,
+                                    "LogisticRegression-test_3m")
+        evaluate_charts(predictions, "LogisticRegression-test_3m")
+        predictions = train_predict(df, rf_model,
+                                    "RandomForestClassifier-test_3m")
+        evaluate_charts(predictions, "LogisticRegression-test_3m")
 
         df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-validation_2m")
-        train_predict(df, rf_model, "RandomForestClassifier-validation_2m")
+        predictions = train_predict(df, lr_model,
+                                    "LogisticRegression-validation_2m")
+        evaluate_charts(predictions, "LogisticRegression-validation_2m")
+        predictions = train_predict(df, rf_model,
+                                    "RandomForestClassifier-validation_2m")
+        evaluate_charts(predictions, "RandomForestClassifier-validation_2m")
 
     elif config.PROD:
         df = transform_test(data.test, int_means, cat_rates, scaler)
-        train_predict(df, rf_model, "RandomForestClassifier-test")
+        predictions = train_predict(df, rf_model, "RandomForestClassifier-test")
+        predictions.show(100)
+        auc = evaluate_roc_auc(predictions, sqlc)
+        print("\n\nArea Under ROC Curve: %0.3f\n\n" % auc)
 
     sc.stop()
 
