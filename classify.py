@@ -14,7 +14,9 @@ from etl import transform_train, transform_test
 from summary import cat_column_counts_iter, integer_column_mean_iter
 
 
-CAT_COLUMNS = ["C8", "C9"]
+CAT_COLUMNS = ["C20", "C17"]
+# CAT_COLUMNS = ["C8", "C9"]
+# CAT_COLUMNS = ["C20", "C17", "C9", "C6", "C23"]
 LR_MAX_ITER = 10
 LR_REG_PARAM = 0.01
 random.seed(time.time())
@@ -55,17 +57,12 @@ def evaluate_predictions(predictions, model_name=""):
     evaluate.plot_roc(fpr, tpr, roc_auc, model_name=model_name)
 
 
-def save_model(model, name="model"):
-    model.save(os.path.join(config.MODELS_PATH, name))
-
-
-def train_validate(train, validation):
-    raise NotImplementedError()
-
-
 def train_predict(test, model, model_name="Model"):
     predictions = model.transform(test)
-    predictions.select(["features", "label", "prediction"]).show()
+    (
+        predictions
+        .select("features", "label", "prediction", "probability")
+        .show(100, truncate=False))
     evaluate_predictions(predictions, model_name)
 
 
@@ -94,41 +91,48 @@ def main():
 
     data = CriteoDataSets(sc, sqlc)
 
-    if config.DEBUG:
-        train = data.debug
-    else:
-        train = data.train_5m
+    train = data.debug
+    # if config.DEBUG:
+    #     train = data.debug
+    # else:
+    #     train = data.train_5m
 
-    df, int_means, cat_rates, scaler = prepare(train, CAT_COLUMNS)
+    if config.DEBUG:
+        test = data.debug
+    elif config.VALIDATE:
+        test = data.validation_2m
+    elif config.TEST:
+        test = data.test_3m
+    elif config.PROD:
+        test = data.test
+
+    train_df, int_means, cat_rates, scaler = prepare(train, CAT_COLUMNS)
 
     # Only the RandomForestClassifier is used for production scoring
     if not config.PROD:
-        _, lr_model = train_logistic(df)
+        _, lr_model = train_logistic(train_df)
 
-    _, rf_model = train_random_forest(df)
+    _, rf_model = train_random_forest(train_df)
+
+    train_df.unpersist()
+    train_df = None
+    test_df = transform_test(test, int_means, cat_rates, scaler)
+    int_means, cat_rates, scaler = None, None, None
 
     if config.DEBUG:
-        df = transform_test(data.debug, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-debug")
-        train_predict(df, rf_model, "RandomForestClassifier-debug")
+        train_predict(test_df, lr_model, "LogisticRegression-debug")
+        train_predict(test_df, rf_model, "RandomForestClassifier-debug")
 
     elif config.VALIDATE:
-        df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-validation_2m")
-        train_predict(df, rf_model, "RandomForestClassifier-validation_2m")
+        train_predict(test_df, lr_model, "LogisticRegression-validation_2m")
+        train_predict(test_df, rf_model, "RandomForestClassifier-validation_2m")
 
     elif config.TEST:
-        df = transform_test(data.test_3m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-test_3m")
-        train_predict(df, rf_model, "RandomForestClassifier-test_3m")
-
-        df = transform_test(data.validation_2m, int_means, cat_rates, scaler)
-        train_predict(df, lr_model, "LogisticRegression-validation_2m")
-        train_predict(df, rf_model, "RandomForestClassifier-validation_2m")
+        train_predict(test_df, lr_model, "LogisticRegression-test_3m")
+        train_predict(test_df, rf_model, "RandomForestClassifier-test_3m")
 
     elif config.PROD:
-        df = transform_test(data.test, int_means, cat_rates, scaler)
-        train_predict(df, rf_model, "RandomForestClassifier-test")
+        train_predict(test_df, rf_model, "RandomForestClassifier-test")
 
     sc.stop()
 
