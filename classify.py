@@ -9,6 +9,7 @@ from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import StringIndexer
+from pyspark.mllib.linalg import Vectors
 from criteodata import CriteoDataSets
 from etl import transform_train, transform_test
 from summary import cat_column_counts_iter, integer_column_mean_iter
@@ -49,7 +50,7 @@ def train_random_forest(df):
     return rf, rf.fit(td)
 
 
-def evaluate_predictions(predictions, model_name=""):
+def evaluate_charts(predictions, model_name=""):
     labels = evaluate.labels_array(predictions)
     scores = evaluate.scores_array(predictions)
     fpr, tpr, thresholds = evaluate.roc(labels, scores)
@@ -66,8 +67,17 @@ def train_predict(test, model, model_name="Model"):
     evaluate_predictions(predictions, model_name)
 
 
-def prod_predict(test):
-    raise NotImplementedError()
+def evaluate_roc_auc(predictions, sqlc):
+    raw = scores_and_labels(predictions, sqlc)
+    evaluator = BinaryClassificationEvaluator()
+    return evaluator.evaluate(raw)
+
+
+def scores_and_labels(predictions, sqlc):
+    raw = predictions.map(lambda r: (Vectors.dense(1.0 - r["prediction"],
+                                                   r["prediction"]),
+                                     r["label"]))
+    return sqlc.createDataFrame(raw, ["rawPrediction", "label"])
 
 
 # Given Global Variables that represent the feature columns we wish to include
@@ -91,11 +101,11 @@ def main():
 
     data = CriteoDataSets(sc, sqlc)
 
-    train = data.debug
-    # if config.DEBUG:
-    #     train = data.debug
-    # else:
-    #     train = data.train_5m
+    # train = data.debug
+    if config.DEBUG:
+        train = data.debug
+    else:
+        train = data.train_5m
 
     if config.DEBUG:
         test = data.debug
