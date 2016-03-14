@@ -15,7 +15,7 @@ Run the `split.py` script to split Criteo's `train.txt` dataset into a `test.txt
 
 ## Summary Statistics Instructions
 
-Open the hw1_summary_statistics.ipyn notebook. 
+Open the hw1_summary_statistics.ipyn notebook.
 
 Running the notebook will calculate the histograms for the integer and category features. Further, the notebook will also calculate the summary statistics for the integer features (mean, std, skewness, kurtosis).
 
@@ -23,10 +23,14 @@ Running the notebook will calculate the histograms for the integer and category 
 ## Classification Instructions
 Once setup and Criteo Data splits are completed, the data analysis can be initiated through `classify.py`.
 
-To train on `train_5m.txt` and make predictions for `test_3m.txt` and `validation_2m.txt`:
+Train on `train_5m.txt` and make predictions for `test_3m.txt`:
 
     $ ./classify.py
 
-To train on `train_5m.txt` and make predictions for `test.txt`:
+Train on `train_5m.txt` and make predictions for `validation_2m.txt`:
+
+    $ PY_ENV=validate ./classify.py
+
+Train on `train_5m.txt` and make predictions for `test.txt` (38mm rows):
 
     $ PY_ENV=production ./classify.py
